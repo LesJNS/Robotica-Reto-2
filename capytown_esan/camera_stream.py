@@ -9,7 +9,7 @@ Paneles:
     2. /lane/birdeye_image  — vista de pájaro (IPM aplicado)
     3. /lane/debug_image    — máscaras de color + centroides
 
-Fallback: si lane_detector no está corriendo, el panel 1 muestra /image_raw.
+Fallback: si lane_detector no está corriendo, el panel 1 muestra /camera/image_raw.
 
 Acceso desde la red local:
     http://10.42.0.1:5800/          (desde tu PC, IP del robot)
@@ -29,7 +29,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 PORT = 5800  # puerto HTTP — debe estar expuesto en el Docker
 
@@ -150,7 +150,7 @@ class CameraStream(Node):
 
         # Fallback: si lane_detector no publica raw_trapezoid, usar la cámara cruda
         self.create_subscription(
-            Image, '/image_raw', self._cb_fallback, 5)
+            Image, '/camera/image_raw', self._cb_fallback, 5)
 
         self.get_logger().info(
             f'camera_stream listo — abre http://10.42.0.1:{PORT}/ en el navegador')
@@ -161,11 +161,11 @@ class CameraStream(Node):
             with _lock:
                 _frames[key] = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
             if key == 'raw':
-                self._has_raw = True   # desactivar el fallback de /image_raw
+                self._has_raw = True   # desactivar el fallback de /camera/image_raw
         return _cb
 
     def _cb_fallback(self, msg):
-        """Muestra /image_raw en el panel 1 solo si raw_trapezoid no está disponible."""
+        """Muestra /camera/image_raw en el panel 1 solo si raw_trapezoid no está disponible."""
         if not self._has_raw:
             with _lock:
                 _frames['raw'] = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
@@ -176,7 +176,10 @@ def main(args=None):
     node = CameraStream()
 
     # Lanzar el servidor HTTP en un hilo daemon (muere al terminar el proceso)
-    server = HTTPServer(('0.0.0.0', PORT), _Handler)
+    # ThreadingHTTPServer: cada panel abre un stream MJPEG persistente (bucle
+    # infinito); con HTTPServer normal (1 solo hilo) el primer panel que conecta
+    # bloquea a los demás para siempre.
+    server = ThreadingHTTPServer(('0.0.0.0', PORT), _Handler)
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
 

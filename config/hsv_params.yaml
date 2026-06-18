@@ -33,6 +33,9 @@ lane_detector:
     px_per_meter: 600.0
     look_ahead_row: 0.65
     band_half_height: 30
+    ipm_top_width: 0.85   # antes 0.60 — ensanchado: la línea se salía del trapecio en ciertas zonas
+    ipm_top_y: 0.55
+    ipm_bottom_y: 0.97
 
     # ---------------------------------------------------------------
     # Navegación — amarillo como referencia principal

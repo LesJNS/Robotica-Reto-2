@@ -23,6 +23,12 @@ hsv_tuner_output.yaml
 *.png
 *.pdf
 
+# Evidencia final exigida por la rúbrica RC-2 — sí se commitea
+!lane_error_s11.png
+!trajectory_s11.png
+!lane_report_s11.png
+!lane_visualization_s11.png
+
 # Editores
 .vscode/
 *.swp

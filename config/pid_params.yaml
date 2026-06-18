@@ -2,19 +2,20 @@ lane_controller:
   ros__parameters:
 
     # PID — sintonizar en este orden: primero kp, luego kd, al final ki
-    kp: 4.0          # proporcional (oscila si es muy alto)
+    kp: 2.8          # proporcional (oscila si es muy alto)
     ki: 0.0          # integral desactivado: evita drift acumulado de curvas
     kd: 0.7          # derivativo (amortigua oscilaciones)
-    kff: 1.0         # feed-forward de tendencia (anticipa giros)
+    kff: 0.5         # feed-forward de tendencia (anticipa giros)
 
     # Velocidad de crucero — subir progresivamente: 0.10 → 0.15 → 0.20
-    linear_speed: 0.30   # m/s  (TURBO TEST 🚀)
+    linear_speed: 0.22   # m/s  (≥ 0.20 m/s exigido por la rúbrica)
 
-    max_angular: 2.0     # rad/s — saturación de omega
+    max_angular: 1.3     # rad/s — saturación de omega (bajado de 2.0: se desequilibraba)
     integral_limit: 0.5  # anti-windup: límite acumulador integral
-    error_timeout: 0.8   # s — sin /lane_error → modo recuperación
+    error_timeout: 0.8   # s — sin /lane_error fresco (sensor caído) → frenar
     control_rate: 30.0   # Hz del lazo de control
-    recovery_w: 1.05     # rad/s = 60 deg/s girando al buscar la línea perdida
-    recovery_v: 0.05     # m/s avance lento mientras busca la línea
+    recovery_w: 0.7        # rad/s — giro de búsqueda al perder la línea en curva
+    recovery_v: 0.05      # m/s — avance lento mientras busca la línea
+    recovery_timeout: 1.5 # s máximos buscando antes de frenar de verdad
     history_size: 10     # muestras para calcular tendencia de giro (~0.33s)
     turn_threshold: 0.3   # |ω| rad/s mínimo para activar FF (giro diferencial real)

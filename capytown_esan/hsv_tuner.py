@@ -17,13 +17,13 @@ Cómo usar:
     5. Copiar los valores al archivo config/hsv_params.yaml
 
 Ventanas abiertas:
-    - "Original"      — frame en vivo de /image_raw
+    - "Original"      — frame en vivo de /camera/image_raw
     - "Mascara AMARILLO" — máscara binaria del amarillo con sus trackbars
     - "Mascara BLANCO"   — máscara binaria del blanco con sus trackbars
     - "Comparacion"   — overlay de ambas detecciones sobre la imagen original
 
 Dependencias:
-    ros2 run capytown_esan cam_pub    (debe estar publicando /image_raw)
+    ros2 run capytown_esan cam_pub    (debe estar publicando /camera/image_raw)
 """
 
 import rclpy
@@ -103,7 +103,7 @@ def save_yaml(ylo, yhi, wlo, whi):
 
 
 class HsvTuner(Node):
-    """Nodo ROS2 que recibe frames de /image_raw y actualiza las ventanas de calibración."""
+    """Nodo ROS2 que recibe frames de /camera/image_raw y actualiza las ventanas de calibración."""
 
     def __init__(self):
         super().__init__('hsv_tuner')
@@ -112,8 +112,8 @@ class HsvTuner(Node):
 
         make_windows()
 
-        # Suscribirse a /image_raw para recibir frames en vivo
-        self.sub   = self.create_subscription(Image, '/image_raw', self._cb, 5)
+        # Suscribirse a /camera/image_raw para recibir frames en vivo
+        self.sub   = self.create_subscription(Image, '/camera/image_raw', self._cb, 5)
 
         # Timer que actualiza las ventanas a ~33 Hz
         self.timer = self.create_timer(0.03, self._update)

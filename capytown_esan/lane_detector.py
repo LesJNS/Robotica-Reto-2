@@ -7,16 +7,18 @@ filtrado HSV + IPM (Inverse Perspective Mapping) y calcula el error
 lateral del robot respecto al centro del carril.
 
 Pipeline:
-    /image_raw  →  warp IPM  →  filtro HSV  →  centroides  →  /lane_error
+    /camera/image_raw  →  warp IPM  →  filtro HSV  →  centroides  →  /lane_error
 
 Tópicos suscritos:
-    /image_raw           (sensor_msgs/Image)
+    /camera/image_raw    (sensor_msgs/Image)
 
 Tópicos publicados:
     /lane_error          (std_msgs/Float32)  — error lateral en metros
     /lane/debug_image    (sensor_msgs/Image) — imagen de diagnóstico
     /lane/yellow_x       (std_msgs/Float32)  — posición X amarillo (0-1)
     /lane/white_x        (std_msgs/Float32)  — posición X blanco   (0-1)
+    /lane/raw_trapezoid  (sensor_msgs/Image) — cámara cruda + ROI de la IPM dibujada
+    /lane/birdeye_image  (sensor_msgs/Image) — vista de pájaro (resultado de la IPM)
 
 Convención de signo del error:
     error > 0  →  centro a la DERECHA del robot  →  girar derecha (ω < 0)
@@ -62,6 +64,9 @@ class LaneDetector(Node):
             ('px_per_meter',       600.0),    # calibrado para la pista real
             ('look_ahead_row',     0.88),     # fracción de altura donde se mide (0=arriba, 1=abajo)
             ('band_half_height',   30),       # semialtura de la banda de medición en px
+            ('ipm_top_width',      0.60),     # fracción del ancho que cubre el borde superior del trapecio IPM
+            ('ipm_top_y',          0.55),     # fracción de altura del borde superior del trapecio
+            ('ipm_bottom_y',       0.97),     # fracción de altura del borde inferior del trapecio
             # Setpoint de navegación
             ('yellow_setpoint',    0.33),     # fracción del ancho objetivo para el amarillo en curva
             # Comportamiento
@@ -99,6 +104,9 @@ class LaneDetector(Node):
         self.px_per_meter    = float(gp('px_per_meter').value)
         self.look_ahead_row  = float(gp('look_ahead_row').value)
         self.band_half_h     = int(gp('band_half_height').value)
+        self.ipm_top_width   = float(gp('ipm_top_width').value)
+        self.ipm_top_y       = float(gp('ipm_top_y').value)
+        self.ipm_bottom_y    = float(gp('ipm_bottom_y').value)
         self.yellow_setpoint = float(gp('yellow_setpoint').value)
         self.require_both    = bool(gp('require_both_lines').value)
         self.publish_debug   = bool(gp('publish_debug').value)
@@ -117,11 +125,13 @@ class LaneDetector(Node):
 
         # ── Tópicos ROS ────────────────────────────────────────────────────────
         self.sub     = self.create_subscription(
-            Image, '/image_raw', self.on_image, 10)
-        self.pub_err = self.create_publisher(Float32, '/lane_error',        10)
-        self.pub_dbg = self.create_publisher(Image,   '/lane/debug_image',  10)
-        self.pub_yx  = self.create_publisher(Float32, '/lane/yellow_x',     10)
-        self.pub_wx  = self.create_publisher(Float32, '/lane/white_x',      10)
+            Image, '/camera/image_raw', self.on_image, 10)
+        self.pub_err  = self.create_publisher(Float32, '/lane_error',         10)
+        self.pub_dbg  = self.create_publisher(Image,   '/lane/debug_image',   10)
+        self.pub_yx   = self.create_publisher(Float32, '/lane/yellow_x',      10)
+        self.pub_wx   = self.create_publisher(Float32, '/lane/white_x',       10)
+        self.pub_trap = self.create_publisher(Image,   '/lane/raw_trapezoid', 10)
+        self.pub_bev  = self.create_publisher(Image,   '/lane/birdeye_image', 10)
 
         self.get_logger().info('lane_detector listo.')
         self.get_logger().info(
@@ -136,19 +146,21 @@ class LaneDetector(Node):
         El trapecio src cubre la región de interés de la pista vista desde la cámara.
         El rectángulo dst es la proyección ortogonal de esa región.
 
-        Puntos src (fracción de w, h):
-            Superior-izq: (0.20, 0.55)  Superior-der: (0.80, 0.55)
-            Inferior-der: (1.00, 0.97)  Inferior-izq: (0.00, 0.97)
+        El borde superior (la parte más lejana de la imagen) se centra en w/2 y
+        cubre ipm_top_width del ancho total — si una línea queda fuera del
+        trapecio en ciertas zonas de la pista, hay que aumentar ipm_top_width
+        en hsv_params.yaml (no requiere recompilar).
 
         Puntos dst (vista pájaro centrada):
             Superior-izq: (0.25w, 0)   Superior-der: (0.75w, 0)
             Inferior-der: (0.75w, h)   Inferior-izq: (0.25w, h)
         """
+        half_top = self.ipm_top_width / 2.0
         src = np.float32([
-            [0.20 * w, 0.55 * h],  # esquina superior izquierda del trapecio
-            [0.80 * w, 0.55 * h],  # esquina superior derecha
-            [1.00 * w, 0.97 * h],  # esquina inferior derecha (borde de imagen)
-            [0.00 * w, 0.97 * h],  # esquina inferior izquierda
+            [(0.5 - half_top) * w, self.ipm_top_y * h],     # esquina superior izquierda
+            [(0.5 + half_top) * w, self.ipm_top_y * h],     # esquina superior derecha
+            [1.00 * w,             self.ipm_bottom_y * h],  # esquina inferior derecha
+            [0.00 * w,             self.ipm_bottom_y * h],  # esquina inferior izquierda
         ])
         dst = np.float32([
             [0.25 * w, 0.0],       # vista pájaro: comprime lados laterales
@@ -158,6 +170,7 @@ class LaneDetector(Node):
         ])
         self.M         = cv2.getPerspectiveTransform(src, dst)
         self.warp_size = (w, h)
+        self.src_pts   = src.astype(np.int32)  # ROI para overlay de /lane/raw_trapezoid
 
     # ── Callback principal — procesamiento de cada frame ──────────────────────
     def on_image(self, msg):
@@ -287,6 +300,7 @@ class LaneDetector(Node):
         if self.publish_debug:
             self._publish_debug(warp, mask_white, mask_yellow, row,
                                 x_white, x_yellow, center_px, msg)
+            self._publish_calibration_views(frame, warp, msg)
 
     # ── Filtrado por forma (PCA) ───────────────────────────────────────────────
     def _filter_by_shape(self, mask, min_area, max_area, min_elongation,
@@ -394,6 +408,25 @@ class LaneDetector(Node):
         out        = self.bridge.cv2_to_imgmsg(dbg, 'bgr8')
         out.header = header_msg.header
         self.pub_dbg.publish(out)
+
+    # ── Vistas de calibración para camera_stream.py ───────────────────────────
+    def _publish_calibration_views(self, frame, warp, header_msg):
+        """
+        Publica las dos vistas que usa el visor web durante la calibración:
+            /lane/raw_trapezoid — cámara cruda con el ROI de la IPM dibujado (cyan)
+            /lane/birdeye_image — resultado de la IPM (debe verse recto y vertical)
+        """
+        trap = frame.copy()
+        cv2.polylines(trap, [self.src_pts], isClosed=True,
+                      color=(255, 255, 0), thickness=2)
+
+        out_trap        = self.bridge.cv2_to_imgmsg(trap, 'bgr8')
+        out_trap.header = header_msg.header
+        self.pub_trap.publish(out_trap)
+
+        out_bev        = self.bridge.cv2_to_imgmsg(warp, 'bgr8')
+        out_bev.header = header_msg.header
+        self.pub_bev.publish(out_bev)
 
 
 def main(args=None):

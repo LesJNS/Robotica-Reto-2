@@ -3,10 +3,10 @@
 cam_pub.py — Nodo ROS2 publicador de cámara.
 
 Abre la cámara USB del robot (/dev/video0 por defecto) y publica
-cada frame como sensor_msgs/Image en el tópico /image_raw.
+cada frame como sensor_msgs/Image en el tópico /camera/image_raw.
 
 Tópicos publicados:
-    /image_raw  (sensor_msgs/Image, bgr8)
+    /camera/image_raw  (sensor_msgs/Image, bgr8)
 
 Parámetros (declarados en el nodo, configurables desde el launch):
     device  — índice de la cámara  (default: 0  → /dev/video0)
@@ -39,8 +39,8 @@ class CamPub(Node):
 
         self.bridge = CvBridge()
 
-        # Publisher en /image_raw — queue_size=10 para no saturar
-        self.pub = self.create_publisher(Image, '/image_raw', 10)
+        # Publisher en /camera/image_raw — queue_size=10 para no saturar
+        self.pub = self.create_publisher(Image, '/camera/image_raw', 10)
 
         # Abrir la cámara por índice de dispositivo
         self.cap = cv2.VideoCapture(device)
@@ -56,7 +56,7 @@ class CamPub(Node):
             raise RuntimeError('camera not found')
 
         self.get_logger().info(
-            f'cam_pub: /dev/video{device}  {width}x{height}@{fps}fps → /image_raw')
+            f'cam_pub: /dev/video{device}  {width}x{height}@{fps}fps → /camera/image_raw')
 
         # Timer que dispara _publish() a la frecuencia pedida
         self.timer = self.create_timer(1.0 / fps, self._publish)

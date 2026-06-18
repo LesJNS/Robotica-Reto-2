@@ -19,6 +19,10 @@ Parámetros (configurables desde pid_params.yaml):
     linear_speed   — velocidad lineal constante (m/s)
     max_angular    — límite de velocidad angular (rad/s)
     integral_limit — anti-windup: límite del término integral acumulado
+    error_timeout  — segundos sin /lane_error fresco (sensor caído) antes de frenar
+    recovery_w     — velocidad angular de búsqueda cuando se pierde la línea (NaN)
+    recovery_v     — velocidad lineal de búsqueda cuando se pierde la línea (NaN)
+    recovery_timeout — segundos máximos buscando la línea antes de frenar de verdad
     history_size   — muestras para calcular la tendencia del error
     turn_threshold — |ω| mínimo para aplicar feed-forward (evitarlo en recta)
 
@@ -51,8 +55,9 @@ class LaneController(Node):
             ('integral_limit', 0.5),     # anti-windup: máximo valor absoluto del integrador
             ('error_timeout',  0.5),     # segundos sin recibir error antes de parar
             ('control_rate',   30.0),    # frecuencia del loop de control en Hz
-            ('recovery_w',     0.6),     # velocidad angular de recuperación (sin línea)
-            ('recovery_v',     0.0),     # velocidad lineal de recuperación
+            ('recovery_w',     0.6),     # velocidad angular de búsqueda (sin línea, NaN)
+            ('recovery_v',     0.0),     # velocidad lineal de búsqueda (sin línea, NaN)
+            ('recovery_timeout', 1.5),   # segundos máximos buscando antes de frenar
             ('history_size',   10),      # muestras para calcular tendencia (~0.33 s a 30 Hz)
             ('turn_threshold',  0.3),    # |ω| mínimo para habilitar el FF en curvas
         ])
@@ -68,6 +73,7 @@ class LaneController(Node):
         self.timeout     = float(gp('error_timeout').value)
         self.recovery_w     = float(gp('recovery_w').value)
         self.recovery_v     = float(gp('recovery_v').value)
+        self.recovery_timeout = float(gp('recovery_timeout').value)
         self.turn_threshold = float(gp('turn_threshold').value)
         hist                = int(gp('history_size').value)
         rate                = float(gp('control_rate').value)
@@ -81,6 +87,8 @@ class LaneController(Node):
         self.has_line     = False  # True si el último error era numérico (no NaN)
         self.last_stamp   = self.get_clock().now()
         self.last_rx      = self.get_clock().now()
+        self._stale_warned = False  # evita spamear el log mientras el sensor sigue caído
+        self._recovery_start = None  # instante en que se empezó a buscar la línea (None = no buscando)
 
         # Cola circular para calcular la tendencia del error (feed-forward)
         self.error_history = deque(maxlen=hist)
@@ -143,12 +151,48 @@ class LaneController(Node):
             self.pub.publish(Twist())
             return
 
-        # Sin línea detectada → parar completamente y limpiar el estado PID
-        if not self.has_line:
+        # Sensor caído: /lane_error no llega ningún mensaje (ni siquiera NaN)
+        # desde hace más de error_timeout segundos → tratar como sin línea.
+        stale = (now - self.last_rx).nanoseconds * 1e-9 > self.timeout
+        if stale and not self._stale_warned:
+            self.get_logger().warn(
+                f'/lane_error sin datos frescos por > {self.timeout}s — frenando.')
+            self._stale_warned = True
+        elif not stale:
+            self._stale_warned = False
+
+        # Sensor caído de verdad (silencio total) → frenar y limpiar el estado PID
+        if stale:
             self.integral = 0.0
             self.error_history.clear()
+            self._recovery_start = None
             self.pub.publish(Twist())
             return
+
+        # Sin línea (NaN) pero el sensor sigue vivo: lo más probable es que la
+        # cámara perdió la línea a mitad de una curva. Frenar de inmediato corta
+        # el giro a la mitad; en vez de eso, seguimos girando hacia el mismo lado
+        # que ya llevábamos (last_w) durante recovery_timeout segundos, buscando
+        # recuperar la línea, antes de rendirnos y frenar de verdad.
+        if not self.has_line:
+            if self._recovery_start is None:
+                self._recovery_start = now
+            searching_for = (now - self._recovery_start).nanoseconds * 1e-9
+
+            if searching_for > self.recovery_timeout:
+                self.integral = 0.0
+                self.error_history.clear()
+                self.pub.publish(Twist())
+                return
+
+            direction = 1.0 if self.last_w >= 0.0 else -1.0
+            cmd           = Twist()
+            cmd.linear.x  = self.recovery_v
+            cmd.angular.z = max(-self.max_w, min(self.max_w, direction * self.recovery_w))
+            self.pub.publish(cmd)
+            return
+
+        self._recovery_start = None  # ya hay línea de nuevo: cancelar la búsqueda
 
         e = self.error
         self.error_history.append(e)

@@ -12,7 +12,7 @@ def generate_launch_description():
 
     return LaunchDescription([
 
-        # 1. Cámara → /image_raw
+        # 1. Cámara → /camera/image_raw
         Node(
             package='capytown_esan',
             executable='cam_pub',
@@ -21,7 +21,7 @@ def generate_launch_description():
             output='screen',
         ),
 
-        # 2. Detector de carril: /image_raw → /lane_error
+        # 2. Detector de carril: /camera/image_raw → /lane_error
         Node(
             package='capytown_esan',
             executable='lane_detector',

@@ -13,11 +13,11 @@ Uso:
     python3 scripts/lane_visualization.py ~/bags/lane_error_s11
 
 El bag debe contener:
-    /lane_error       (std_msgs/Float32)
-    /lane/yellow_x    (std_msgs/Float32)   -- publicado por lane_detector v1.5+
-    /lane/white_x     (std_msgs/Float32)
-    /image_raw        (sensor_msgs/Image)  -- cámara original
-    /lane/debug_image (sensor_msgs/Image)  -- cámara con detección
+    /lane_error        (std_msgs/Float32)
+    /lane/yellow_x     (std_msgs/Float32)   -- publicado por lane_detector v1.5+
+    /lane/white_x      (std_msgs/Float32)
+    /camera/image_raw  (sensor_msgs/Image)  -- cámara original
+    /lane/debug_image  (sensor_msgs/Image)  -- cámara con detección
 """
 
 import sys
@@ -64,7 +64,7 @@ data = {
     'err':   {'t': [], 'v': []},
     'yx':    {'t': [], 'v': []},
     'wx':    {'t': [], 'v': []},
-    'raw':   {'t': [], 'v': []},   # /image_raw
+    'raw':   {'t': [], 'v': []},   # /camera/image_raw
     'dbg':   {'t': [], 'v': []},   # /lane/debug_image
 }
 
@@ -72,7 +72,7 @@ TOPIC_MAP = {
     '/lane_error':       ('err',  Float32),
     '/lane/yellow_x':    ('yx',   Float32),
     '/lane/white_x':     ('wx',   Float32),
-    '/image_raw':        ('raw',  Image),
+    '/camera/image_raw': ('raw',  Image),
     '/lane/debug_image': ('dbg',  Image),
 }
 
@@ -115,7 +115,7 @@ print(f"Duración: {t_dur:.1f}s")
 print(f"  /lane_error    : {len(data['err']['t'])} muestras")
 print(f"  /lane/yellow_x : {len(data['yx']['t'])} muestras")
 print(f"  /lane/white_x  : {len(data['wx']['t'])} muestras")
-print(f"  /image_raw     : {len(data['raw']['t'])} frames")
+print(f"  /camera/image_raw : {len(data['raw']['t'])} frames")
 print(f"  /lane/debug_image: {len(data['dbg']['t'])} frames")
 
 # ── Seleccionar 4 snapshots equiespaciados ────────────────────────────────────
@@ -258,7 +258,7 @@ for col, (t_s, f_raw, f_dbg) in enumerate(snaps):
 
     # Si no hay raw, anotar
     if f_raw is None:
-        ax_r.text(0.5, 0.5, 'Sin /image_raw\nen el bag',
+        ax_r.text(0.5, 0.5, 'Sin /camera/image_raw\nen el bag',
                   transform=ax_r.transAxes, ha='center', va='center',
                   color='white', fontsize=9)
     if f_dbg is None:
