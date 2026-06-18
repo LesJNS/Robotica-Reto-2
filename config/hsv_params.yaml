@@ -1,0 +1,54 @@
+lane_detector:
+  ros__parameters:
+
+    # ---------------------------------------------------------------
+    # Blanco - HSV
+    # Blanco/gris bajo sombra: sin color (S baja) + brillo medio-alto (V alta)
+    # El piso negro tiene V muy baja, el amarillo tiene S muy alta → no se confunden
+    # ---------------------------------------------------------------
+    white_s_min: 0
+    white_s_max: 65     # calibrado: blanco real tiene S < 65
+    white_v_min: 170    # calibrado: blanco brillante tiene V > 170
+    white_v_max: 255
+    white_max_area: 25000
+    white_min_area: 1000     # componentes pequeños = reflejos puntuales
+    white_min_elongation: 5.0  # ratio PCA: cintas son alargadas, reflejos no
+
+    # ---------------------------------------------------------------
+    # Amarillo - HSV - línea IZQUIERDA del carril
+    # ---------------------------------------------------------------
+    yellow_h_min: 15
+    yellow_h_max: 45    # calibrado: ampliado a 45
+    yellow_s_min: 45    # calibrado: reducido a 45 para amarillo menos saturado
+    yellow_s_max: 255
+    yellow_v_min: 80
+    yellow_v_max: 255
+    yellow_min_area: 500
+    yellow_min_elongation: 8.0  # cintas amarillas son muy alargadas
+
+    # ---------------------------------------------------------------
+    # Geometría / IPM
+    # ---------------------------------------------------------------
+    min_area: 150
+    px_per_meter: 600.0
+    look_ahead_row: 0.65
+    band_half_height: 30
+
+    # ---------------------------------------------------------------
+    # Navegación — amarillo como referencia principal
+    # yellow_setpoint: fracción del ancho donde debe aparecer el amarillo
+    #   0.25 = 25% desde la izquierda (robot más pegado al amarillo)
+    #   0.35 = 35% desde la izquierda (robot más al centro)
+    # white_weight: cuánto influye el blanco cuando se detectan ambas líneas
+    #   0.0 = ignorar blanco completamente
+    #   0.25 = blanco aporta 25% de corrección
+    # ---------------------------------------------------------------
+    yellow_setpoint: 0.31
+
+    # ---------------------------------------------------------------
+    # Comportamiento
+    # ---------------------------------------------------------------
+    require_both_lines: false
+    publish_debug: true
+    curves_to_stop: 13    # 3 vueltas x 4 curvas + 1 ajuste
+    curve_debounce: 20    # frames sin blanco para confirmar curva

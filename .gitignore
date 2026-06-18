@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ROS2 / colcon
+install/
+log/
+build/
+*.bag
+*.db3
+
+# Calibración local (no subir — cada robot tiene su propia pista)
+hsv_tuner_output.yaml
+
+# Plots generados (resultados de análisis — se generan desde el bag)
+*.png
+*.pdf
+
+# Editores
+.vscode/
+*.swp
+*.swo
+.idea/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
